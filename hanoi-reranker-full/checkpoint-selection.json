@@ -1,0 +1,127 @@
+{
+  "task": "towers-of-hanoi",
+  "selection_split": "test",
+  "selection_episodes": 3,
+  "pick_radius": 4,
+  "place_radius": 6,
+  "selected_checkpoint": {
+    "name": "towers-of-hanoi-transporter-10-0",
+    "step": 4000,
+    "attention_path": "./checkpoints/towers-of-hanoi-transporter-10-0/attention-ckpt-4000.h5",
+    "transport_path": "./checkpoints/towers-of-hanoi-transporter-10-0/transport-ckpt-4000.h5",
+    "oracle_move_agreement": 1.0,
+    "legal_candidate_coverage": 1.0,
+    "mean_candidate_count": 2.857142857142857,
+    "mean_transporter_latency_s": 2.8414646243809765,
+    "episodes_evaluated": 3,
+    "states_evaluated": 21,
+    "meets_threshold": true
+  },
+  "all_checkpoints": [
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-10-0",
+        "step": 4000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-10-0/attention-ckpt-4000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-10-0/transport-ckpt-4000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 1.0,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 2.8414646243809765
+    },
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-10-0",
+        "step": 3000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-10-0/attention-ckpt-3000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-10-0/transport-ckpt-3000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 1.0,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 2.795361775285658
+    },
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-10-0",
+        "step": 2000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-10-0/attention-ckpt-2000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-10-0/transport-ckpt-2000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 1.0,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 2.8022857653806916
+    },
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-10-0",
+        "step": 5000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-10-0/attention-ckpt-5000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-10-0/transport-ckpt-5000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 0.9523809523809523,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 3.0262277675715485
+    },
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-100-0",
+        "step": 1000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-100-0/attention-ckpt-1000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-100-0/transport-ckpt-1000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 0.9523809523809523,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 3.294785304714467
+    },
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-20-0",
+        "step": 1000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-20-0/attention-ckpt-1000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-20-0/transport-ckpt-1000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 0.8571428571428571,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 3.057821821523941
+    },
+    {
+      "checkpoint": {
+        "name": "towers-of-hanoi-transporter-10-0",
+        "step": 1000,
+        "attention_path": "./checkpoints/towers-of-hanoi-transporter-10-0/attention-ckpt-1000.h5",
+        "transport_path": "./checkpoints/towers-of-hanoi-transporter-10-0/transport-ckpt-1000.h5"
+      },
+      "split": "test",
+      "episodes_evaluated": 3,
+      "states_evaluated": 21,
+      "oracle_move_agreement": 0.8095238095238095,
+      "legal_candidate_coverage": 1.0,
+      "mean_candidate_count": 2.857142857142857,
+      "mean_transporter_latency_s": 2.781546859381013
+    }
+  ]
+}

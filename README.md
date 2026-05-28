@@ -41,7 +41,28 @@ Key additions:
 - `requirements-smolvlm.txt`: separate dependency set for running SmolVLM outside the original Ravens TensorFlow environment.
 - Updates to training, testing, demo collection, Transporter 6DoF handling, and task matching to support the Hanoi experiments.
 
-Generated datasets, result pickles, plots, checkpoints, logs, rollout videos, and local editor/cache files are intentionally ignored by Git. They are produced locally by the commands below and are not included in this fork.
+Generated datasets, result pickles, checkpoints, logs, rollout videos, VLM request images, scene-history images, and local editor/cache files are intentionally ignored by Git. The best benchmark summaries and report plots are committed under `hanoi-results-full-compare/`.
+
+### Best Committed Results
+
+The best committed run is a 100-episode Towers of Hanoi comparison at checkpoint 4000 with 10 demonstrations. It compares the vanilla Transporter baseline against legal-candidate reranking and the heuristic VLM-over-Transporter policy.
+
+| Agent | Success Rate | Legal Move Rate | Executed Oracle Agreement | Mean Steps | Mean Total Latency |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `transporter` | 64% | 76.2% | 0.0% | 9.83 | 2.26 s |
+| `reranker-transporter` | 96% | 100% | 97.2% | 7.40 | 4.58 s |
+| `vlm-transporter` | 97% | 100% | 99.1% | 7.28 | 4.62 s |
+
+Committed result artifacts:
+
+- `hanoi-results-full-compare/report/summary.csv`
+- `hanoi-results-full-compare/report/summary.json`
+- `hanoi-reranker-full/checkpoint-selection.json`
+- `hanoi-reranker-full/model/metadata.json`
+
+The report plots are committed, but detailed per-episode JSON logs and raw VLM scene/request images are not. The main success plot is:
+
+![Hanoi success versus steps](hanoi-results-full-compare/report/success_vs_steps.png)
 
 ### Hanoi Quick Start
 
