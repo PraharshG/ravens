@@ -27,6 +27,57 @@ Some tasks require generalizing to unseen objects (d,g,h), or multi-step sequenc
 
 **Abstract.** Robotic manipulation can be formulated as inducing a sequence of spatial displacements: where the space being moved can encompass an object, part of an object, or end effector. In this work, we propose the Transporter Network, a simple model architecture that rearranges deep features to infer spatial displacements from visual input—which can parameterize robot actions. It makes no assumptions of objectness (e.g. canonical poses, models, or keypoints), it exploits spatial symmetries, and is orders of magnitude more sample efficient than our benchmarked alternatives in learning vision-based manipulation tasks: from stacking a pyramid of blocks, to assembling kits with unseen objects; from manipulating deformable ropes, to pushing piles of small objects with closed-loop feedback. Our method can represent complex multi-modal policy distributions and generalizes to multi-step sequential tasks, as well as 6DoF pick-and-place. Experiments on 10 simulated tasks show that it learns faster and generalizes better than a variety of end-to-end baselines, including policies that use ground-truth object poses. We validate our methods with hardware in the real world.
 
+## Fork Updates: Hanoi VLM Transporter Workflow
+
+This fork adds a Towers of Hanoi benchmark workflow that compares vanilla Transporter policies with legal-move candidate filtering, VLM-guided reranking, learned reranking, ground-truth state baselines, and oracle rollouts.
+
+Key additions:
+
+- `ravens/hanoi_benchmark.py`: benchmark runner for `transporter`, `vlm-transporter`, `reranker-transporter`, `gt_state`, and `oracle`.
+- `ravens/hanoi_utils.py`: symbolic Hanoi state extraction, legal candidate generation, Transporter candidate scoring, rollout recording, VLM request rendering, and result summaries.
+- `ravens/hanoi_vlm_worker.py`: VLM worker with a local heuristic backend and a SmolVLM backend.
+- `ravens/hanoi_report.py`: report generation for success, legal-move rate, oracle agreement, latency, candidate coverage, and VLM parse/fallback metrics.
+- `ravens/hanoi_reranker.py`, `ravens/hanoi_select_checkpoint.py`, `ravens/hanoi_export_reranker_dataset.py`, and `ravens/hanoi_train_reranker.py`: CPU-feasible checkpoint selection and learned legal-candidate reranking tools.
+- `requirements-smolvlm.txt`: separate dependency set for running SmolVLM outside the original Ravens TensorFlow environment.
+- Updates to training, testing, demo collection, Transporter 6DoF handling, and task matching to support the Hanoi experiments.
+
+Generated datasets, result pickles, plots, checkpoints, logs, rollout videos, and local editor/cache files are intentionally ignored by Git. They are produced locally by the commands below and are not included in this fork.
+
+### Hanoi Quick Start
+
+Generate demonstrations and train a Transporter baseline:
+
+```shell
+python ravens/demos.py --assets_root=./ravens/environments/assets --task=towers-of-hanoi --mode=train --n=100
+python ravens/demos.py --assets_root=./ravens/environments/assets --task=towers-of-hanoi --mode=test --n=100
+python ravens/train.py --task=towers-of-hanoi --agent=transporter --n_demos=10 --n_steps=1000
+```
+
+Run a quick VLM-over-Transporter smoke test with the built-in heuristic worker:
+
+```shell
+python ravens/hanoi_benchmark.py \
+  --assets_root=./ravens/environments/assets \
+  --data_dir=. \
+  --root_dir=. \
+  --task=towers-of-hanoi \
+  --agent=vlm-transporter \
+  --candidate_mode=legal \
+  --n_demos=10 \
+  --n_steps=1000 \
+  --episodes=5 \
+  --vlm_command="python ravens/hanoi_vlm_worker.py --backend=heuristic" \
+  --output_dir=./hanoi-results-legal-smoke
+```
+
+Generate a report:
+
+```shell
+python ravens/hanoi_report.py --input_dir=./hanoi-results-legal-smoke --output_dir=./hanoi-results-legal-smoke/report
+```
+
+See `docs/hanoi_vlm_improved.md`, `docs/hanoi_two_stage_training_report.md`, `docs/hanoi_reranker_full_runbook.md`, and `docs/run_tasks.md` for full experiment runbooks.
+
 ## Installation
 
 **Step 1.** Recommended: install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) with Python 3.7.
