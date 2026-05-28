@@ -1,0 +1,29 @@
+# PyTorch (CPU-only)
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+
+# HuggingFace stack (critical for SmolVLM)
+transformers==4.39.3
+accelerate==0.29.3
+huggingface_hub==0.22.2
+safetensors==0.4.2
+
+# Vision + model utils
+timm==0.9.16
+einops==0.7.0
+sentencepiece==0.2.0
+
+# Core scientific stack
+numpy==1.26.4
+pillow==10.3.0
+opencv-python==4.9.0.80
+scipy==1.13.0
+
+# Misc
+matplotlib==3.8.4
+pyyaml==6.0.1
+tqdm==4.66.2
+
+# Ravens deps (commonly needed)
+pybullet==3.2.6

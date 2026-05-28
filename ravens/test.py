@@ -32,13 +32,15 @@ flags.DEFINE_string('data_dir', '.', '')
 flags.DEFINE_string('assets_root', './assets/', '')
 flags.DEFINE_bool('disp', False, '')
 flags.DEFINE_bool('shared_memory', False, '')
-flags.DEFINE_string('task', 'hanoi', '')
+flags.DEFINE_string('task', 'towers-of-hanoi', '')
 flags.DEFINE_string('agent', 'transporter', '')
 flags.DEFINE_integer('n_demos', 100, '')
 flags.DEFINE_integer('n_steps', 40000, '')
 flags.DEFINE_integer('n_runs', 1, '')
 flags.DEFINE_integer('gpu', 0, '')
 flags.DEFINE_integer('gpu_limit', None, '')
+flags.DEFINE_bool('save_results_pickle', False,
+                  'Save legacy top-level .pkl evaluation outputs.')
 
 FLAGS = flags.FLAGS
 
@@ -108,11 +110,11 @@ def main(unused_argv):
           break
       results.append((total_reward, info))
 
-      # Save results.
-      with tf.io.gfile.GFile(
-          os.path.join(FLAGS.root_dir, f'{name}-{FLAGS.n_steps}.pkl'),
-          'wb') as f:
-        pickle.dump(results, f)
+      if FLAGS.save_results_pickle:
+        with tf.io.gfile.GFile(
+            os.path.join(FLAGS.root_dir, f'{name}-{FLAGS.n_steps}.pkl'),
+            'wb') as f:
+          pickle.dump(results, f)
 
 
 if __name__ == '__main__':

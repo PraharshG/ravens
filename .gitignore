@@ -1,1 +1,31 @@
 /venv/
+
+# Python caches.
+__pycache__/
+*.py[cod]
+
+# Local editor and assistant state.
+.vscode/
+.codex
+
+# Generated datasets, plots, checkpoints, and run outputs.
+*.pkl
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.tif
+*.tiff
+/checkpoints/
+/logs/
+/block-insertion-test/
+/block-insertion-train/
+/towers-of-hanoi-test/
+/towers-of-hanoi-train/
+/hanoi-results*/
+/hanoi-reranker-full/
+
+# Accidental shell redirection artifact from local installs.
+=4.38

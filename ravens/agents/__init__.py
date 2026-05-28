@@ -32,6 +32,7 @@ from ravens.agents.transporter_6dof import Transporter6dAgent
 names = {'dummy': DummyAgent,
          'transporter': OriginalTransporterAgent,
          'transporter_6d': Transporter6dAgent,
+         'transporter_3d': Transporter6dAgent,
          'no_transport': NoTransportTransporterAgent,
          'per_pixel_loss': PerPixelLossTransporterAgent,
          'conv_mlp': PickPlaceConvMlpAgent,

@@ -13,355 +13,233 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Transporter Agent (6DoF Hybrid with Regression)."""
+"""Transporter Agent (hybrid 6-DoF / 3D placement baseline)."""
+
+import os
 
 import numpy as np
-from ravens import models
 from ravens.agents.transporter import TransporterAgent
+from ravens.models.attention import Attention
+from ravens.models.transport import Transport
+from ravens.models.transport_6dof import TransportHybrid6DoF
 from ravens.utils import utils
 import tensorflow as tf
 from transforms3d import quaternions
 
 
 class Transporter6dAgent(TransporterAgent):
-  """6D Transporter variant."""
+  """Transporter variant with planar pick and 6-DoF place prediction."""
 
-  def __init__(self, name, task):
-    super().__init__(name, task)
+  def __init__(self, name, task, root_dir='.', n_rotations=36):
+    super().__init__(name, task, root_dir, n_rotations)
 
-    self.attention_model = models.Attention(
-        input_shape=self.input_shape,
-        num_rotations=1,
-        preprocess=self.preprocess)
-    self.transport_model = models.Transport(
-        input_shape=self.input_shape,
-        num_rotations=self.num_rotations,
+    self.attention = Attention(
+        in_shape=self.in_shape,
+        n_rotations=1,
+        preprocess=utils.preprocess)
+    self.transport = Transport(
+        in_shape=self.in_shape,
+        n_rotations=self.n_rotations,
         crop_size=self.crop_size,
-        preprocess=self.preprocess,
-        per_pixel_loss=False,
-        six_dof=False)
-
-    self.rpz_model = models.Transport(
-        input_shape=self.input_shape,
-        num_rotations=self.num_rotations,
+        preprocess=utils.preprocess)
+    self.transport_6d = TransportHybrid6DoF(
+        in_shape=self.in_shape,
+        n_rotations=self.n_rotations,
         crop_size=self.crop_size,
-        preprocess=self.preprocess,
-        per_pixel_loss=False,
-        six_dof=True)
-
-    self.transport_model.set_bounds_pixel_size(self.bounds, self.pixel_size)
-    self.rpz_model.set_bounds_pixel_size(self.bounds, self.pixel_size)
-
+        preprocess=utils.preprocess)
     self.six_dof = True
 
-    self.p0_pixel_error = tf.keras.metrics.Mean(name='p0_pixel_error')
-    self.p1_pixel_error = tf.keras.metrics.Mean(name='p1_pixel_error')
-    self.p0_theta_error = tf.keras.metrics.Mean(name='p0_theta_error')
-    self.p1_theta_error = tf.keras.metrics.Mean(name='p1_theta_error')
-    self.metrics = [
-        self.p0_pixel_error, self.p1_pixel_error, self.p0_theta_error,
-        self.p1_theta_error
-    ]
+  def _pose_to_matrix(self, pose):
+    position, rotation = pose
+    quat_wxyz = (rotation[3], rotation[0], rotation[1], rotation[2])
+    transform = np.eye(4)
+    transform[:3, :3] = quaternions.quat2mat(quat_wxyz)
+    transform[:3, 3] = np.asarray(position)
+    return transform
 
-  def get_six_dof(self,
-                  transform_params,
-                  heightmap,
-                  pose0,
-                  pose1,
+  def get_six_dof(self, transform_params, heightmap, pose0, pose1,
                   augment=True):
-    """Adjust SE(3) poses via the in-plane SE(2) augmentation transform."""
-    debug_visualize = False
+    """Adjust SE(3) labels after image-space augmentation."""
 
-    p1_position, p1_rotation = pose1[0], pose1[1]
-    p0_position, p0_rotation = pose0[0], pose0[1]
-
-    if debug_visualize:
-      self.vis = utils.create_visualizer()
-      self.transport_model.vis = self.vis
-
-    if augment:
+    if augment and transform_params is not None:
       t_world_center, t_world_centernew = utils.get_se3_from_image_transform(
-          *transform_params, heightmap, self.bounds, self.pixel_size)
-
-      if debug_visualize:
-        label = 't_world_center'
-        utils.make_frame(self.vis, label, h=0.05, radius=0.0012, o=1.0)
-        self.vis[label].set_transform(t_world_center)
-
-        label = 't_world_centernew'
-        utils.make_frame(self.vis, label, h=0.05, radius=0.0012, o=1.0)
-        self.vis[label].set_transform(t_world_centernew)
-
+          *transform_params, heightmap, self.bounds, self.pix_size)
       t_worldnew_world = t_world_centernew @ np.linalg.inv(t_world_center)
     else:
       t_worldnew_world = np.eye(4)
 
-    p1_quat_wxyz = (p1_rotation[3], p1_rotation[0], p1_rotation[1],
-                    p1_rotation[2])
-    t_world_p1 = quaternions.quat2mat(p1_quat_wxyz)
-    t_world_p1[0:3, 3] = np.array(p1_position)
-
+    t_world_p1 = self._pose_to_matrix(pose1)
     t_worldnew_p1 = t_worldnew_world @ t_world_p1
 
-    p0_quat_wxyz = (p0_rotation[3], p0_rotation[0], p0_rotation[1],
-                    p0_rotation[2])
-    t_world_p0 = quaternions.quat2mat(p0_quat_wxyz)
-    t_world_p0[0:3, 3] = np.array(p0_position)
+    t_world_p0 = self._pose_to_matrix(pose0)
     t_worldnew_p0 = t_worldnew_world @ t_world_p0
 
-    if debug_visualize:
-      label = 't_worldnew_p1'
-      utils.make_frame(self.vis, label, h=0.05, radius=0.0012, o=1.0)
-      self.vis[label].set_transform(t_worldnew_p1)
+    # Picking uses suction with rotational symmetry around the tool axis,
+    # so we only regress the placing pose relative to a zero-yaw pick frame.
+    t_worldnew_p0theta0 = t_worldnew_p0.copy()
+    t_worldnew_p0theta0[:3, :3] = np.eye(3)
 
-      label = 't_world_p1'
-      utils.make_frame(self.vis, label, h=0.05, radius=0.0012, o=1.0)
-      self.vis[label].set_transform(t_world_p1)
-
-      label = 't_worldnew_p0-0thetaoriginally'
-      utils.make_frame(self.vis, label, h=0.05, radius=0.0021, o=1.0)
-      self.vis[label].set_transform(t_worldnew_p0)
-
-    # PICK FRAME, using 0 rotation due to suction rotational symmetry
-    t_worldnew_p0theta0 = t_worldnew_p0 * 1.0
-    t_worldnew_p0theta0[0:3, 0:3] = np.eye(3)
-
-    if debug_visualize:
-      label = 'PICK'
-      utils.make_frame(self.vis, label, h=0.05, radius=0.0021, o=1.0)
-      self.vis[label].set_transform(t_worldnew_p0theta0)
-
-    # PLACE FRAME, adjusted for this 0 rotation on pick
     t_p0_p0theta0 = np.linalg.inv(t_worldnew_p0) @ t_worldnew_p0theta0
     t_worldnew_p1theta0 = t_worldnew_p1 @ t_p0_p0theta0
 
-    if debug_visualize:
-      label = 'PLACE'
-      utils.make_frame(self.vis, label, h=0.05, radius=0.0021, o=1.0)
-      self.vis[label].set_transform(t_worldnew_p1theta0)
+    quat_wxyz = quaternions.mat2quat(t_worldnew_p1theta0[:3, :3])
+    quat_xyzw = (quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0])
+    p1_euler = utils.quatXYZW_to_eulerXYZ(quat_xyzw)
 
-    # convert the above rotation to euler
-    quatwxyz_worldnew_p1theta0 = quaternions.mat2quat(t_worldnew_p1theta0)
-    q = quatwxyz_worldnew_p1theta0
-    quatxyzw_worldnew_p1theta0 = (q[1], q[2], q[3], q[0])
-    p1_rotation = quatxyzw_worldnew_p1theta0
-    p1_euler = utils.quatXYZW_to_eulerXYZ(p1_rotation)
-    roll = p1_euler[0]
-    pitch = p1_euler[1]
-    p1_theta = -p1_euler[2]
-
-    p0_theta = 0
-    z = p1_position[2]
+    p0_theta = 0.0
+    p1_theta = -np.float32(p1_euler[2])
+    z = np.float32(t_worldnew_p1theta0[2, 3])
+    roll = np.float32(p1_euler[0])
+    pitch = np.float32(p1_euler[1])
     return p0_theta, p1_theta, z, roll, pitch
 
   def get_sample(self, dataset, augment=True):
     (obs, act, _, _), _ = dataset.sample()
     img = self.get_image(obs)
 
-    # Get training labels from data sample.
     p0_xyz, p0_xyzw = act['pose0']
     p1_xyz, p1_xyzw = act['pose1']
     p0 = utils.xyz_to_pix(p0_xyz, self.bounds, self.pix_size)
-    p0_theta = -np.float32(utils.quatXYZW_to_eulerXYZ(p0_xyzw)[2])
     p1 = utils.xyz_to_pix(p1_xyz, self.bounds, self.pix_size)
-    p1_theta = -np.float32(utils.quatXYZW_to_eulerXYZ(p1_xyzw)[2])
-    p1_theta = p1_theta - p0_theta
-    p0_theta = 0
 
     if augment:
-      img, _, (p0, p1), transforms = utils.perturb(img, [p0, p1])
-      p0_theta, p1_theta, z, roll, pitch = self.get_six_dof(
-          transforms, img[:, :, 3], (p0_xyz, p0_xyzw), (p1_xyz, p1_xyzw))
+      img, _, (p0, p1), transform_params = utils.perturb(img, [p0, p1])
+    else:
+      transform_params = None
+
+    p0_theta, p1_theta, z, roll, pitch = self.get_six_dof(
+        transform_params, img[:, :, 3], (p0_xyz, p0_xyzw), (p1_xyz, p1_xyzw),
+        augment=augment)
 
     return img, p0, p0_theta, p1, p1_theta, z, roll, pitch
 
-  def train(self, dataset, num_iter, writer, validation_dataset):
-    """Train on dataset for a specific number of iterations.
+  def train(self, dataset, writer=None):
+    """Train on a dataset sample for 1 iteration."""
+    tf.keras.backend.set_learning_phase(1)
+    img, p0, p0_theta, p1, p1_theta, z, roll, pitch = self.get_sample(dataset)
 
-    Args:
-      dataset: a ravens.Dataset.
-      num_iter: int, number of iterations to train.
-      writer: a TF summary writer (for tensorboard).
-      validation_dataset: a ravens.Dataset.
-    """
+    step = self.total_steps + 1
+    loss0 = self.attention.train(img, p0, p0_theta)
+    loss1 = self.transport.train(img, p0, p1, p1_theta)
+    loss2 = self.transport_6d.train(img, p0, p1, p1_theta, z, roll, pitch)
 
-    validation_rate = 200
-
-    for i in range(num_iter):
-
-      tf.keras.backend.set_learning_phase(1)
-      _, p0, p0_theta, p1, p1_theta, z, roll, pitch = self.get_sample(
-          dataset)
-
-      # Compute training losses.
-      loss0 = self.attention_model.train(input_image, p0, p0_theta)
-
-      loss1 = self.transport_model.train(input_image, p0, p1, p1_theta, z, roll,
-                                         pitch)
-
-      loss2 = self.rpz_model.train(input_image, p0, p1, p1_theta, z, roll,
-                                   pitch)
-      del loss2
-
+    if writer is not None:
       with writer.as_default():
+        tf.summary.scalar('train_loss/attention', loss0, step)
+        tf.summary.scalar('train_loss/transport', loss1, step)
+        tf.summary.scalar('train_loss/transport_6d', loss2, step)
         tf.summary.scalar(
-            'attention_loss',
-            self.attention_model.metric.result(),
-            step=self.total_iter + i)
-
+            'train_loss/transport_6d_z',
+            self.transport_6d.z_metric.result(), step)
         tf.summary.scalar(
-            'transport_loss',
-            self.transport_model.metric.result(),
-            step=self.total_iter + i)
+            'train_loss/transport_6d_roll',
+            self.transport_6d.roll_metric.result(), step)
         tf.summary.scalar(
-            'z_loss',
-            self.rpz_model.z_metric.result(),
-            step=self.total_iter + i)
-        tf.summary.scalar(
-            'roll_loss',
-            self.rpz_model.roll_metric.result(),
-            step=self.total_iter + i)
-        tf.summary.scalar(
-            'pitch_loss',
-            self.rpz_model.pitch_metric.result(),
-            step=self.total_iter + i)
+            'train_loss/transport_6d_pitch',
+            self.transport_6d.pitch_metric.result(), step)
 
-      print(f'Train Iter: {self.total_iter + i} Loss: {loss0:.4f} {loss1:.4f}')
+    print(f'Train Iter: {step} Loss: {loss0:.4f} {loss1:.4f} {loss2:.4f}')
+    self.total_steps = step
 
-      if (self.total_iter + i) % validation_rate == 0:
-        print('Validating!')
-        tf.keras.backend.set_learning_phase(0)
-        input_image, p0, p0_theta, p1, p1_theta, z, roll, pitch = self.get_data_batch(
-            validation_dataset, augment=False)
+  def validate(self, dataset, writer=None):
+    """Run lightweight validation without updating weights."""
+    tf.keras.backend.set_learning_phase(0)
+    n_iter = 10
+    loss0, loss1, loss2 = 0, 0, 0
+    for _ in range(n_iter):
+      img, p0, p0_theta, p1, p1_theta, z, roll, pitch = self.get_sample(
+          dataset, augment=False)
+      loss0 += self.attention.train(img, p0, p0_theta, backprop=False)
+      loss1 += self.transport.train(img, p0, p1, p1_theta, backprop=False)
+      loss2 += self.transport_6d.train(
+          img, p0, p1, p1_theta, z, roll, pitch, backprop=False)
 
-        loss1 = self.transport_model.train(
-            input_image, p0, p1, p1_theta, z, roll, pitch, validate=True)
+    loss0 /= n_iter
+    loss1 /= n_iter
+    loss2 /= n_iter
 
-        loss2 = self.rpz_model.train(
-            input_image, p0, p1, p1_theta, z, roll, pitch, validate=True)
+    if writer is not None:
+      with writer.as_default():
+        tf.summary.scalar('test_loss/attention', loss0, self.total_steps)
+        tf.summary.scalar('test_loss/transport', loss1, self.total_steps)
+        tf.summary.scalar('test_loss/transport_6d', loss2, self.total_steps)
+    print(f'Validation Loss: {loss0:.4f} {loss1:.4f} {loss2:.4f}')
 
-        # compute pixel/theta metrics
-        # [metric.reset_states() for metric in self.metrics]
-        # for _ in range(30):
-        #     obs, act, info = validation_dataset.random_sample()
-        #     self.act(obs, act, info, compute_error=True)
-
-        with writer.as_default():
-          tf.summary.scalar(
-              'val_transport_loss',
-              self.transport_model.metric.result(),
-              step=self.total_iter + i)
-          tf.summary.scalar(
-              'val_z_loss',
-              self.rpz_model.z_metric.result(),
-              step=self.total_iter + i)
-          tf.summary.scalar(
-              'val_roll_loss',
-              self.rpz_model.roll_metric.result(),
-              step=self.total_iter + i)
-          tf.summary.scalar(
-              'val_pitch_loss',
-              self.rpz_model.pitch_metric.result(),
-              step=self.total_iter + i)
-
-          tf.summary.scalar(
-              'p0_pixel_error',
-              self.p0_pixel_error.result(),
-              step=self.total_iter + i)
-          tf.summary.scalar(
-              'p1_pixel_error',
-              self.p1_pixel_error.result(),
-              step=self.total_iter + i)
-          tf.summary.scalar(
-              'p0_theta_error',
-              self.p0_theta_error.result(),
-              step=self.total_iter + i)
-          tf.summary.scalar(
-              'p1_theta_error',
-              self.p1_theta_error.result(),
-              step=self.total_iter + i)
-
-        tf.keras.backend.set_learning_phase(1)
-
-    self.total_iter += num_iter
-    self.save()
-
-  def act(self, obs, info, compute_error=False, gt_act=None):
+  def act(self, obs, info=None, goal=None):  # pylint: disable=unused-argument
     """Run inference and return best action given visual observations."""
+    tf.keras.backend.set_learning_phase(0)
 
-    # Get heightmap from RGB-D images.
-    colormap, heightmap = self.get_heightmap(obs, self.camera_config)
+    img = self.get_image(obs)
 
-    # Concatenate color with depth images.
-    input_image = np.concatenate(
-        (colormap, heightmap[Ellipsis, None], heightmap[Ellipsis, None], heightmap[Ellipsis,
-                                                                         None]),
-        axis=2)
+    pick_conf = self.attention.forward(img)
+    pick_argmax = np.argmax(pick_conf)
+    pick_argmax = np.unravel_index(pick_argmax, shape=pick_conf.shape)
+    p0_pix = pick_argmax[:2]
+    p0_theta = pick_argmax[2] * (2 * np.pi / pick_conf.shape[2])
 
-    # Attention model forward pass.
-    attention = self.attention_model.forward(input_image)
-    argmax = np.argmax(attention)
-    argmax = np.unravel_index(argmax, shape=attention.shape)
-    p0_pixel = argmax[:2]
-    p0_theta = argmax[2] * (2 * np.pi / attention.shape[2])
+    place_conf = self.transport.forward(img, p0_pix)
+    _, z_tensor, roll_tensor, pitch_tensor = self.transport_6d.forward(
+        img, p0_pix)
 
-    # Transport model forward pass.
-    transport = self.transport_model.forward(input_image, p0_pixel)
-    _, z, roll, pitch = self.rpz_model.forward(input_image, p0_pixel)
+    place_argmax = np.argmax(place_conf)
+    place_argmax = np.unravel_index(place_argmax, shape=place_conf.shape)
+    p1_pix = place_argmax[:2]
+    p1_theta = place_argmax[2] * (2 * np.pi / place_conf.shape[2])
 
-    argmax = np.argmax(transport)
-    argmax = np.unravel_index(argmax, shape=transport.shape)
+    z_value = tf.reshape(
+        z_tensor[:, place_argmax[0], place_argmax[1], place_argmax[2]], (1, 1))
+    roll_value = tf.reshape(
+        roll_tensor[:, place_argmax[0], place_argmax[1], place_argmax[2]],
+        (1, 1))
+    pitch_value = tf.reshape(
+        pitch_tensor[:, place_argmax[0], place_argmax[1], place_argmax[2]],
+        (1, 1))
 
-    # Index into 3D discrete tensor, grab z, roll, pitch activations
-    z_best = z[:, argmax[0], argmax[1], argmax[2]][Ellipsis, None]
-    roll_best = roll[:, argmax[0], argmax[1], argmax[2]][Ellipsis, None]
-    pitch_best = pitch[:, argmax[0], argmax[1], argmax[2]][Ellipsis, None]
+    z_best = float(self.transport_6d.z_regressor(z_value)[0, 0])
+    roll_best = float(self.transport_6d.roll_regressor(roll_value)[0, 0])
+    pitch_best = float(self.transport_6d.pitch_regressor(pitch_value)[0, 0])
 
-    # Send through regressors for each of z, roll, pitch
-    z_best = self.rpz_model.z_regressor(z_best)[0, 0]
-    roll_best = self.rpz_model.roll_regressor(roll_best)[0, 0]
-    pitch_best = self.rpz_model.pitch_regressor(pitch_best)[0, 0]
+    z_best = float(np.clip(z_best, self.bounds[2, 0], self.bounds[2, 1]))
+    roll_best = float(np.clip(roll_best, -np.pi / 2, np.pi / 2))
+    pitch_best = float(np.clip(pitch_best, -np.pi / 2, np.pi / 2))
 
-    p1_pixel = argmax[:2]
-    p1_theta = argmax[2] * (2 * np.pi / transport.shape[2])
+    hmap = img[:, :, 3]
+    p0_xyz = utils.pix_to_xyz(p0_pix, hmap, self.bounds, self.pix_size)
+    p1_xyh = utils.pix_to_xyz(p1_pix, hmap, self.bounds, self.pix_size)
+    p1_xyz = (p1_xyh[0], p1_xyh[1], z_best)
 
-    # Pixels to end effector poses.
-    p0_position = utils.pix_to_xyz(p0_pixel, heightmap, self.bounds,
-                                   self.pixel_size)
-    p1_position = utils.pix_to_xyz(p1_pixel, heightmap, self.bounds,
-                                   self.pixel_size)
-
-    p1_position = (p1_position[0], p1_position[1], z_best)
-
-    p0_rotation = utils.eulerXYZ_to_quatXYZW((0, 0, -p0_theta))
-    p1_rotation = utils.eulerXYZ_to_quatXYZW(
-        (roll_best, pitch_best, -p1_theta))
-
-    if compute_error:
-      gt_p0_position, gt_p0_rotation = gt_act['params']['pose0']
-      gt_p1_position, gt_p1_rotation = gt_act['params']['pose1']
-
-      gt_p0_pixel = np.array(
-          utils.xyz_to_pix(gt_p0_position, self.bounds, self.pixel_size))
-      gt_p1_pixel = np.array(
-          utils.xyz_to_pix(gt_p1_position, self.bounds, self.pixel_size))
-
-      self.p0_pixel_error(np.linalg.norm(gt_p0_pixel - np.array(p0_pixel)))
-      self.p1_pixel_error(np.linalg.norm(gt_p1_pixel - np.array(p1_pixel)))
-
-      gt_p0_theta = -np.float32(
-          utils.quatXYZW_to_eulerXYZ(gt_p0_rotation)[2])
-      gt_p1_theta = -np.float32(
-          utils.quatXYZW_to_eulerXYZ(gt_p1_rotation)[2])
-
-      self.p0_theta_error(
-          abs((np.rad2deg(gt_p0_theta - p0_theta) + 180) % 360 - 180))
-      self.p1_theta_error(
-          abs((np.rad2deg(gt_p1_theta - p1_theta) + 180) % 360 - 180))
-
-      return None
+    p0_xyzw = utils.eulerXYZ_to_quatXYZW((0, 0, -p0_theta))
+    p1_xyzw = utils.eulerXYZ_to_quatXYZW((roll_best, pitch_best, -p1_theta))
 
     return {
-        'pose0': (np.asarray(p0_position), np.asarray(p0_rotation)),
-        'pose1': (np.asarray(p1_position), np.asarray(p1_rotation))
+        'pose0': (np.asarray(p0_xyz), np.asarray(p0_xyzw)),
+        'pose1': (np.asarray(p1_xyz), np.asarray(p1_xyzw))
     }
+
+  def load(self, n_iter):
+    """Load a pre-trained 3D transporter model."""
+    print(f'Loading pre-trained model at {n_iter} iterations.')
+    attention_fname = os.path.join(
+        self.models_dir, f'attention-ckpt-{n_iter}.h5')
+    transport_fname = os.path.join(
+        self.models_dir, f'transport-ckpt-{n_iter}.h5')
+    transport_6d_fname = os.path.join(
+        self.models_dir, f'transport-6d-ckpt-{n_iter}.h5')
+    self.attention.load(attention_fname)
+    self.transport.load(transport_fname)
+    self.transport_6d.load(transport_6d_fname)
+    self.total_steps = n_iter
+
+  def save(self):
+    """Save 3D transporter checkpoints."""
+    if not tf.io.gfile.exists(self.models_dir):
+      tf.io.gfile.makedirs(self.models_dir)
+    attention_fname = os.path.join(
+        self.models_dir, f'attention-ckpt-{self.total_steps}.h5')
+    transport_fname = os.path.join(
+        self.models_dir, f'transport-ckpt-{self.total_steps}.h5')
+    transport_6d_fname = os.path.join(
+        self.models_dir, f'transport-6d-ckpt-{self.total_steps}.h5')
+    self.attention.save(attention_fname)
+    self.transport.save(transport_fname)
+    self.transport_6d.save(transport_6d_fname)

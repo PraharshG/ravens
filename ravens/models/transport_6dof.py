@@ -15,6 +15,8 @@
 
 """Transport 6DoF models."""
 
+import os
+
 import numpy as np
 from ravens.models.regression import Regression
 from ravens.models.transport import Transport
@@ -130,6 +132,27 @@ class TransportHybrid6DoF(Transport):
 
     self.iters += 1
     return np.float32(loss)
+
+  def save(self, fname):
+    self.model.save(fname)
+    stem, _ = os.path.splitext(fname)
+    self.z_regressor.save_weights(f'{stem}-z.weights.h5')
+    self.roll_regressor.save_weights(f'{stem}-roll.weights.h5')
+    self.pitch_regressor.save_weights(f'{stem}-pitch.weights.h5')
+
+  def load(self, fname):
+    self.model.load_weights(fname)
+
+    # Build the regressors before restoring weights.
+    dummy = tf.zeros((1, 1), dtype=tf.float32)
+    self.z_regressor(dummy)
+    self.roll_regressor(dummy)
+    self.pitch_regressor(dummy)
+
+    stem, _ = os.path.splitext(fname)
+    self.z_regressor.load_weights(f'{stem}-z.weights.h5')
+    self.roll_regressor.load_weights(f'{stem}-roll.weights.h5')
+    self.pitch_regressor.load_weights(f'{stem}-pitch.weights.h5')
 
   #---------------------------------------------------------------------------
   # Visualization methods.

@@ -304,6 +304,19 @@ class Task():
   def is_match(self, pose0, pose1, symmetry):
     """Check if pose0 and pose1 match within a threshold."""
 
+    # Full SE(3) matching is only enabled for explicitly 6-DoF tasks.
+    if self.sixdof:
+      diff_pos = np.float32(pose0[0]) - np.float32(pose1[0])
+      dist_pos = np.linalg.norm(diff_pos)
+
+      quat0 = np.float32(pose0[1])
+      quat1 = np.float32(pose1[1])
+      quat0 /= np.linalg.norm(quat0)
+      quat1 /= np.linalg.norm(quat1)
+      dot = np.clip(np.abs(np.dot(quat0, quat1)), -1.0, 1.0)
+      diff_rot = 2 * np.arccos(dot)
+      return (dist_pos < self.pos_eps) and (diff_rot < self.rot_eps)
+
     # Get translational error.
     diff_pos = np.float32(pose0[0][:2]) - np.float32(pose1[0][:2])
     dist_pos = np.linalg.norm(diff_pos)

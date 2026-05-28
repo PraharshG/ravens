@@ -42,19 +42,29 @@ FLAGS = flags.FLAGS
 
 def main(unused_argv):
 
-  # Initialize environment and task.
+  # Initialize task and dataset.
+  task = tasks.names[FLAGS.task](continuous=FLAGS.continuous)
+  task.mode = FLAGS.mode
+  dataset = Dataset(os.path.join(FLAGS.data_dir, f'{FLAGS.task}-{task.mode}'))
+  if dataset.n_episodes >= FLAGS.n:
+    print(
+        f'Dataset already contains {dataset.n_episodes} episodes; '
+        f'target n={FLAGS.n}. No new data collected.')
+    return
+  if dataset.n_episodes > 0:
+    print(
+        f'Found {dataset.n_episodes} existing episodes; collecting '
+        f'{FLAGS.n - dataset.n_episodes} more.')
+
   env_cls = ContinuousEnvironment if FLAGS.continuous else Environment
   env = env_cls(
       FLAGS.assets_root,
       disp=FLAGS.disp,
       shared_memory=FLAGS.shared_memory,
       hz=480)
-  task = tasks.names[FLAGS.task](continuous=FLAGS.continuous)
-  task.mode = FLAGS.mode
 
-  # Initialize scripted oracle agent and dataset.
+  # Initialize scripted oracle agent.
   agent = task.oracle(env, steps_per_seg=FLAGS.steps_per_seg)
-  dataset = Dataset(os.path.join(FLAGS.data_dir, f'{FLAGS.task}-{task.mode}'))
 
   # Train seeds are even and test seeds are odd.
   seed = dataset.max_seed

@@ -27,7 +27,7 @@ import tensorflow as tf
 
 flags.DEFINE_string('train_dir', '.', '')
 flags.DEFINE_string('data_dir', '.', '')
-flags.DEFINE_string('task', 'hanoi', '')
+flags.DEFINE_string('task', 'towers-of-hanoi', '')
 flags.DEFINE_string('agent', 'transporter', '')
 flags.DEFINE_float('hz', 240, '')
 flags.DEFINE_integer('n_demos', 100, '')

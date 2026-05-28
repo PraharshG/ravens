@@ -30,7 +30,11 @@ import tensorflow as tf
 class TransporterAgent:
   """Agent that uses Transporter Networks."""
 
-  def __init__(self, name, task, root_dir, n_rotations=36):
+  def __init__(self, name, task, root_dir='.', n_rotations=36):
+    # Older variants sometimes pass only the rotation count to the base class.
+    if isinstance(root_dir, (int, np.integer)):
+      n_rotations = int(root_dir)
+      root_dir = '.'
     self.name = name
     self.task = task
     self.total_steps = 0

@@ -67,7 +67,7 @@ class GtStateAgent:
     self.theta_scale = 10.0
     self.batch_size = 128
     self.use_mdn = True
-    self.vis = utils.create_visualizer()
+    self.vis = None
 
     self.bounds = np.array([[0.25, 0.75], [-0.5, 0.5], [0, 0.28]])
     self.pixel_size = 0.003125
@@ -84,11 +84,12 @@ class GtStateAgent:
     if t_worldaug_world is not None:
       object_quat_wxyz = (object_quat_xyzw[3], object_quat_xyzw[0],
                           object_quat_xyzw[1], object_quat_xyzw[2])
-      t_world_object = quaternions.quat2mat(object_quat_wxyz)
+      t_world_object = np.eye(4)
+      t_world_object[0:3, 0:3] = quaternions.quat2mat(object_quat_wxyz)
       t_world_object[0:3, 3] = np.array(object_position)
       t_worldaug_object = t_worldaug_world @ t_world_object
 
-      object_quat_wxyz = quaternions.mat2quat(t_worldaug_object)
+      object_quat_wxyz = quaternions.mat2quat(t_worldaug_object[0:3, 0:3])
       if not preserve_theta:
         object_quat_xyzw = (object_quat_wxyz[1], object_quat_wxyz[2],
                             object_quat_wxyz[3], object_quat_wxyz[0])
@@ -142,7 +143,8 @@ class GtStateAgent:
     return np.hstack((pick_se2, place_se2)).astype(np.float32)
 
   def set_max_obs_vector_length(self, dataset):
-    num_samples = 2000  # just to find the largest environment dimensionality
+    num_samples = min(max(dataset.n_episodes * 10, 10), 200)
+    # Only a modest sample is needed to estimate the largest observation size.
     self.max_obs_vector_length = 0
     max_obs_vector_length = 0
     for _ in range(num_samples):
@@ -168,7 +170,7 @@ class GtStateAgent:
 
     sampled_gt_obs = []
 
-    num_samples = 1000
+    num_samples = min(max(dataset.n_episodes * 10, 10), 200)
     for _ in range(num_samples):
       _, _, info = dataset.random_sample()
       t_worldaug_world, _ = self.get_augmentation_transform()
